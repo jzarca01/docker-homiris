@@ -7,10 +7,18 @@ if(process.env.ENVIRONMENT === 'DEV') {
     console.log(process.env);
 }
 
+let mainFn;
+
 const mqttClient = mqtt.connect(`mqtt://${process.env.MQTT_HOST}:${process.env.MQTT_PORT}`, {clientId:"mqtt-homiris", username: process.env.MQTT_USERNAME, password: process.env.MQTT_PASSWORD});
 
 mqttClient.on('connect', function() {
     console.log("Connected!");
+    mainFn = setInterval(init, 5*60*1000);
+});
+
+mqttClient.on('error', function(err) {
+    console.log("Error!", err);
+    clearInterval(mainFn);
 });
 
 async function getData() {
@@ -66,7 +74,8 @@ async function init () {
             `${process.env.MQTT_TOPIC}/homiris/state`,
             JSON.stringify(err),
         );
+        clearInterval(mainFn);
     }   
 }
 
-setInterval(init, 5*60*1000);
+
