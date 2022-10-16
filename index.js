@@ -7,13 +7,44 @@ if(process.env.ENVIRONMENT === 'DEV') {
     console.log(process.env);
 }
 
+
 let mainFn;
+const ALARM_TOPIC = `${process.env.MQTT_TOPIC}/alarm/0/command`;
+
+const homiris = new Homiris({
+    username: process.env.HOMIRIS_USERNAME,
+    password: process.env.HOMIRIS_PASSWORD,
+    basicToken: process.env.HOMIRIS_BASICTOKEN,
+});
 
 const mqttClient = mqtt.connect(`mqtt://${process.env.MQTT_HOST}:${process.env.MQTT_PORT}`, {clientId:"mqtt-homiris", username: process.env.MQTT_USERNAME, password: process.env.MQTT_PASSWORD});
 
 mqttClient.on('connect', function() {
     console.log("Connected!");
+
     mainFn = setInterval(init, 5*60*1000);
+
+    mqttClient.subscribe(ALARM_TOPIC, function (err) {
+        if (!err) {
+            console.log(`Listening to topic : ${ALARM_TOPIC}`);
+        }
+    })
+      
+});
+
+mqttClient.on('message', async function(topic, message) {
+    if(topic === ALARM_TOPIC) {
+        switch(message) {
+            case 'ON':
+                return await homiris.arm({
+                    silentMode: false,
+                    systemMode: 'TOTAL',
+                })
+            default:
+                return undefined;
+        }
+    }
+    return undefined;
 });
 
 mqttClient.on('error', function(err) {
@@ -22,37 +53,24 @@ mqttClient.on('error', function(err) {
 });
 
 async function getData() {
-    const homiris = new Homiris({
-        username: process.env.HOMIRIS_USERNAME,
-        password: process.env.HOMIRIS_PASSWORD,
-        basicToken: process.env.HOMIRIS_BASICTOKEN,
-    });
-
-    const login = await homiris.login();
-    // console.log(login);
-    const session = await homiris.getIdSession();
-    // console.log(session);
+    await homiris.login();
+    await homiris.getIdSession();
 
     const temp = await homiris.getTemperature();
     // console.log(temp);
 
-    /*await homiris.arm({
-        silentMode: true,
-        systemMode: 'TOTAL',
-    });*/
-
-    // const systemStatus = await homiris.getSystemState();
+    const systemStatus = await homiris.getSystemState();
     // console.log(systemStatus);
 
     return {
         temp,
-        // systemStatus
+        systemStatus
     };
 }
 
 async function init () {
     try {
-        const { temp } = await getData();
+        const { temp, systemStatus } = await getData();
         console.log(temp);
         temp.statements.map(t => {
             const label = slugify(t.label, {
@@ -67,6 +85,11 @@ async function init () {
                 }),
             );
         })
+
+        mqttClient.publish(
+                `${process.env.MQTT_TOPIC}/sensor/alarm/state`,
+                JSON.stringify(systemStatus.securityParameters),
+            );
     }
     catch(err) {
         console.log(err);
