@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "dependencies": {
-    "homiris": "^1.0.0",
+    "homiris": "git+https://github.com/jzarca01/node-homiris.git",
     "mqtt": "^4.3.7",
     "slugify": "^1.6.5"
   },

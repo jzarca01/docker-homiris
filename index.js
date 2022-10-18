@@ -7,8 +7,6 @@ if(process.env.ENVIRONMENT === 'DEV') {
     console.log(process.env);
 }
 
-
-let mainFn;
 const ALARM_TOPIC = `${process.env.MQTT_TOPIC}/alarm/0/command`;
 
 const homiris = new Homiris({
@@ -22,14 +20,11 @@ const mqttClient = mqtt.connect(`mqtt://${process.env.MQTT_HOST}:${process.env.M
 mqttClient.on('connect', function() {
     console.log("Connected!");
 
-    mainFn = setInterval(init, 5*60*1000);
-
     mqttClient.subscribe(ALARM_TOPIC, function (err) {
         if (!err) {
             console.log(`Listening to topic : ${ALARM_TOPIC}`);
         }
     })
-      
 });
 
 mqttClient.on('message', async function(topic, message) {
@@ -39,7 +34,9 @@ mqttClient.on('message', async function(topic, message) {
                 return await homiris.arm({
                     silentMode: false,
                     systemMode: 'TOTAL',
-                })
+                });
+            case 'OFF':
+                return await homiris.disarm();
             default:
                 return undefined;
         }
@@ -71,7 +68,7 @@ async function getData() {
 async function init () {
     try {
         const { temp, systemStatus } = await getData();
-        console.log(temp);
+        console.log(systemStatus);
         temp.statements.map(t => {
             const label = slugify(t.label, {
                 lower: true,      // convert to lower case, defaults to `false`
@@ -101,4 +98,5 @@ async function init () {
     }   
 }
 
+const mainFn = setInterval(init, 10*1000);
 
