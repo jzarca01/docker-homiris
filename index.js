@@ -26,7 +26,7 @@ mqttClient.on('connect', function() {
     mqttClient.subscribe(ALARM_TOPIC);
     mqttClient.publish(process.env.MQTT_TOPIC, 'Subscribed');
 
-    mainFn = setInterval(init, 60*1000);
+    mainFn = setInterval(init, 2*60*1000);
 });
 
 mqttClient.on('message', async function(topic, message) {
@@ -57,92 +57,6 @@ mqttClient.on('disconnect', function() {
 
 mqttClient.on('reconnect', function() {
     console.log("Reconnected!");
-    mainFn = setInterval(init, 60*1000);
-});
-
-mqttClient.on('error', function(err) {
-    console.log("Error!", err);
     clearInterval(mainFn);
-
-    mqttClient.end();
-    process.exit(1);
+    mainFn = setInterval(init, 2*60*1000);
 });
-
-async function login() {
-    await homiris.login();
-    await homiris.getIdSession();
-}
-
-async function getData() {
-    await login();
-
-    const temp = await homiris.getTemperature();
-    // console.log(temp);
-
-    const systemStatus = await homiris.getSystemState();
-    // console.log(systemStatus);
-
-    return {
-        temp,
-        systemStatus
-    };
-}
-
-function updateTemperature(statementsArray) {
-    return statementsArray.map(t => {
-        const label = slugify(t.label, {
-            lower: true,      // convert to lower case, defaults to `false`
-            trim: true         // trim leading and trailing replacement chars, defaults to `true`
-          })
-        return mqttClient.publish(
-            `${process.env.MQTT_TOPIC}/sensor/${label}/state`,
-            JSON.stringify({
-                    temperature: t.temperature,
-
-            }),
-            {
-                retain: true,
-            }
-        );
-    })
-}
-
-function updateSecurityState(securityParameters) {
-    if(securityParameters.status === 'IN_PROGRESS') {
-        return undefined;
-    }
-
-    const alarmState = securityParameters?.status === 'ON' ? 'on' : 'off'
-    return mqttClient.publish(`${process.env.MQTT_TOPIC}/sensor/alarm/state`,
-    JSON.stringify({status: alarmState}),
-    {
-        qos: 2,
-        retain: true
-    }
-);
-}
-
-async function init () {
-    try {
-        const { temp, systemStatus } = await getData();
-        console.log(systemStatus);
-
-        if(temp?.statements) {
-            updateTemperature(temp.statements);
-        }
-        if(systemStatus?.securityParameters) {
-            updateSecurityState(systemStatus.securityParameters)
-        }
-
-    }
-    catch(err) {
-        console.log(err);
-        mqttClient.publish(
-            `${process.env.MQTT_TOPIC}/homiris/state`,
-            JSON.stringify(err),
-        );
-        clearInterval(mainFn);
-        process.exit(1);
-    }   
-}
-
